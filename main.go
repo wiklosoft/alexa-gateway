@@ -141,7 +141,7 @@ func main() {
 
 			if con.Username == userInfo.Username {
 				fmt.Println("Send message to connection ID: %s", con.Connection.ID())
-				con.Connection.Emit("AlexaRequest", r)
+				con.Connection.EmitMessage([]byte("AlexaRequest:" + r))
 			}
 		}
 		c.JSON(iris.StatusOK, nil)
