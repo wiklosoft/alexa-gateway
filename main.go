@@ -51,7 +51,7 @@ func getUserInfo(token string) (user AuthUserData, e error) {
 	body := bytes.NewBufferString(form.Encode())
 	resp, err := http.Post("https://"+client_id+":"+client_secret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
 	if err != nil {
-		fmt.Println(err)
+		log.Println(err)
 		return AuthUserData{}, err
 	}
 	defer resp.Body.Close()
@@ -84,7 +84,7 @@ func main() {
 	clientConnections := list.New()
 
 	ws.OnConnection(func(c websocket.Connection) {
-		fmt.Println("New connection %s", c.ID())
+		log.Println("New connection", c.ID())
 		newConnection := &ClientConnection{"", c}
 		clientConnections.PushBack(newConnection)
 		c.OnDisconnect(func() {
@@ -95,7 +95,7 @@ func main() {
 					break
 				}
 			}
-			fmt.Println("Connection with ID: %s has been disconnected!\n", c.ID())
+			log.Println("Connection with ID: " + c.ID() + " has been disconnected!")
 		})
 	})
 	app.Post("/", func(c *iris.Context) {
