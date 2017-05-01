@@ -89,7 +89,7 @@ func main() {
 		clientConnections.PushBack(newConnection)
 		c.OnDisconnect(func() {
 			for e := clientConnections.Front(); e != nil; e = e.Next() {
-				con := e.Value.(ClientConnection)
+				con := e.Value.(*ClientConnection)
 				if con.Connection.ID() == c.ID() {
 					clientConnections.Remove(e)
 					break
@@ -118,7 +118,7 @@ func main() {
 		}
 
 		for e := clientConnections.Front(); e != nil; e = e.Next() {
-			con := e.Value.(ClientConnection)
+			con := e.Value.(*ClientConnection)
 
 			if con.Username == userInfo.Username {
 				fmt.Println("Send message to connection ID: %s", con.Connection.ID())
