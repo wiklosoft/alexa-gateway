@@ -139,8 +139,8 @@ func main() {
 		for e := clientConnections.Front(); e != nil; e = e.Next() {
 			con := e.Value.(*ClientConnection)
 
-			if con.Username == userInfo.Username {
-				fmt.Println("Send message to connection ID: %s", con.Connection.ID())
+			if userInfo.Username != "" && con.Username == userInfo.Username {
+				log.Println("Send message to connection ID", con.Connection.ID())
 				con.Connection.EmitMessage([]byte("AlexaRequest:" + r))
 			}
 		}
