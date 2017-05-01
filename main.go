@@ -41,15 +41,15 @@ type ClientConnection struct {
 }
 
 func getUserInfo(token string) (user AuthUserData, e error) {
-	client_id := "test_client_1"
-	client_secret := "test_secret"
+	clientID := "test_client_1"
+	clientSecret := "test_secret"
 
 	form := url.Values{
 		"token":           {token},
 		"token_type_hint": {"access_token"},
 	}
 	body := bytes.NewBufferString(form.Encode())
-	resp, err := http.Post("https://"+client_id+":"+client_secret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post("https://"+clientID+":"+clientSecret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Println(err)
 		return AuthUserData{}, err
