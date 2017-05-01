@@ -109,7 +109,8 @@ func main() {
 	app.Adapt(iris.DevLogger(), httprouter.New())
 
 	ws := websocket.New(websocket.Config{
-		Endpoint: "/connect",
+		Endpoint:       "/connect",
+		MaxMessageSize: 102400,
 	})
 	app.Adapt(ws)
 
