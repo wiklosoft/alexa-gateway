@@ -87,6 +87,25 @@ func main() {
 		log.Println("New connection", c.ID())
 		newConnection := &ClientConnection{"", c}
 		clientConnections.PushBack(newConnection)
+		c.OnMessage(func(messageBytes []byte) {
+			message := string(messageBytes)
+
+			messageType := strings.Split(message, ":")[0]
+			messagePayload := strings.Split(message, ":")[1]
+
+			if messageType == "auth" {
+				log.Println("Auth request on connection ", c.ID(), " - ", messagePayload)
+				userInfo, err := getUserInfo(messagePayload)
+				if err != nil {
+					fmt.Println(err)
+					return
+				}
+				newConnection.Username = userInfo.Username
+				log.Println("Saved username: " + newConnection.Username)
+			}
+
+		})
+
 		c.OnDisconnect(func() {
 			for e := clientConnections.Front(); e != nil; e = e.Next() {
 				con := e.Value.(*ClientConnection)
