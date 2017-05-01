@@ -38,16 +38,16 @@ type AuthUserData struct {
 }
 
 type IotVariable struct {
-	Interface    string
-	ResourceType string
-	Href         string
-	Name         string
+	Interface    string `json:"if"`
+	ResourceType string `json:"rt"`
+	Href         string `json:"href"`
+	Name         string `json:"n"`
 }
 
 type IotDevice struct {
 	ID        string
 	Name      string
-	Variables []IotVariable
+	Variables []IotVariable `json:"variables"`
 }
 
 type ClientConnection struct {
@@ -59,7 +59,7 @@ type ClientConnection struct {
 	Mid       int
 }
 
-type RequestCallback func(string)
+type RequestCallback func([]byte)
 
 type IotPayload struct {
 	Request string `json:"request"`
@@ -67,6 +67,16 @@ type IotPayload struct {
 type IotMessage struct {
 	Mid     int        `json:"mid"`
 	Payload IotPayload `json:"payload"`
+	Event   string     `json:"event"`
+}
+
+type IotDevices struct {
+	Devices []IotDevice `json:"devices"`
+}
+
+type EventDeviceListMessage struct {
+	Mid     int        `json:"mid"`
+	Payload IotDevices `json:"payload"`
 	Event   string     `json:"event"`
 }
 
@@ -104,6 +114,15 @@ func sendRequest(conn *ClientConnection, request string, callback RequestCallbac
 	conn.Mid++
 }
 
+func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
+	message := &EventDeviceListMessage{}
+	if err := json.Unmarshal(messageBytes, &message); err != nil {
+		fmt.Println(err)
+	}
+	conn.DeviceList = message.Payload.Devices
+	log.Println(message)
+}
+
 func main() {
 	app := iris.New()
 	app.Adapt(iris.DevLogger(), httprouter.New())
@@ -124,8 +143,8 @@ func main() {
 			Callbacks:  make(map[int]RequestCallback)}
 		clientConnections.PushBack(newConnection)
 
-		sendRequest(newConnection, "RequestGetDevices", func(response string) {
-			log.Println("Callback response" + response)
+		sendRequest(newConnection, "RequestGetDevices", func(response []byte) {
+			parseDeviceList(newConnection, response)
 		})
 
 		c.OnMessage(func(messageBytes []byte) {
@@ -138,7 +157,7 @@ func main() {
 
 			callback := newConnection.Callbacks[message.Mid]
 			if callback != nil {
-				callback("message")
+				callback(messageBytes)
 				delete(newConnection.Callbacks, message.Mid)
 			}
 		})
