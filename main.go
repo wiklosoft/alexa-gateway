@@ -19,7 +19,7 @@ type AlexaHeader struct {
 	Namespace      string `json:"namespace"`
 	Name           string `json:"name"`
 	PayloadVersion string `json:"payloadVersion"`
-	MessageId      string `json:"messageId"`
+	MessageID      string `json:"messageId"`
 }
 type AlexaPayload struct {
 	AccessToken string `json:"accessToken"`
