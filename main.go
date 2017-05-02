@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/twinj/uuid"
+
 	"container/list"
 
 	"strconv"
@@ -177,6 +179,9 @@ func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
 	log.Println(message)
 }
 
+func generateMessageUUID() string {
+	return uuid.NewV4().String()
+}
 func handleAlexaMessage(request *AlexaMessage, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
 
 	if request.Header.Namespace == NAMESPACE_DISCOVERY {
@@ -184,7 +189,7 @@ func handleAlexaMessage(request *AlexaMessage, clientConnections *list.List, use
 		response.Header.Name = DISCOVER_APPLIANCES_RESPONSE
 		response.Header.Namespace = NAMESPACE_DISCOVERY
 		response.Header.PayloadVersion = "2"
-		response.Header.MessageID = "746d98-ab02-4c9e-9d0d-b44711658414" //TODO: add random value
+		response.Header.MessageID = generateMessageUUID()
 
 		for e := clientConnections.Front(); e != nil; e = e.Next() {
 			con := e.Value.(*ClientConnection)
