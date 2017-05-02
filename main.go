@@ -171,10 +171,10 @@ func getUserInfo(token string) (user AuthUserData, e error) {
 	return userData, nil
 }
 
-func sendRequest(conn *ClientConnection, request string, callback RequestCallback) {
-	log.Println("sendRequest " + request)
+func sendRequest(conn *ClientConnection, payload string, callback RequestCallback) {
+	log.Println("sendRequest " + payload)
 	conn.Callbacks[conn.Mid] = callback
-	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.Itoa(conn.Mid) + `, "payload":{"request":"` + request + `"}}`))
+	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.Itoa(conn.Mid) + `, "payload":` + payload + `}`))
 	conn.Mid++
 }
 
@@ -316,7 +316,7 @@ func main() {
 			Callbacks:  make(map[int]RequestCallback)}
 		clientConnections.PushBack(newConnection)
 
-		sendRequest(newConnection, "RequestGetDevices", func(response []byte) {
+		sendRequest(newConnection, `{"request":"RequestGetDevices"}`, func(response []byte) {
 			parseDeviceList(newConnection, response)
 		})
 
