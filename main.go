@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/tidwall/gjson"
 	"github.com/twinj/uuid"
 
 	"container/list"
@@ -15,6 +16,8 @@ import (
 	"strconv"
 
 	"strings"
+
+	"io/ioutil"
 
 	"gopkg.in/kataras/iris.v6"
 	"gopkg.in/kataras/iris.v6/adaptors/httprouter"
@@ -75,6 +78,11 @@ type AlexaDiscoveryResponse struct {
 	Header  AlexaHeader `json:"header"`
 	Payload struct {
 		DiscoveredAppliances []AlexaDevice `json:"discoveredAppliances"`
+	} `json:"payload"`
+}
+type AlexaControlResponse struct {
+	Header  AlexaHeader `json:"header"`
+	Payload struct {
 	} `json:"payload"`
 }
 
@@ -182,9 +190,21 @@ func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
 func generateMessageUUID() string {
 	return uuid.NewV4().String()
 }
-func handleAlexaMessage(request *AlexaMessage, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
 
-	if request.Header.Namespace == NAMESPACE_DISCOVERY {
+func onTurnOnOffRequest(deviceID string, value bool) {
+
+}
+func onSetPercentRequest(deviceID string, resource string, value int64) {
+
+}
+func onChangePercentRequest(deviceID string, resource string, value int64) {
+
+}
+
+func handleAlexaMessage(message string, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
+	namespace := gjson.Get(message, "header.namespace").String()
+
+	if namespace == NAMESPACE_DISCOVERY {
 		response := &AlexaDiscoveryResponse{}
 		response.Header.Name = DISCOVER_APPLIANCES_RESPONSE
 		response.Header.Namespace = NAMESPACE_DISCOVERY
@@ -234,6 +254,43 @@ func handleAlexaMessage(request *AlexaMessage, clientConnections *list.List, use
 				}
 			}
 		}
+		log.Println(response)
+		c.JSON(iris.StatusOK, response)
+	} else if namespace == NAMESPACE_CONTROL {
+		name := gjson.Get(message, "header.name").String()
+		response := &AlexaControlResponse{}
+
+		response.Header.Namespace = NAMESPACE_CONTROL
+		response.Header.PayloadVersion = "2"
+		response.Header.MessageID = generateMessageUUID()
+
+		applianceID := strings.Split(gjson.Get(message, "payload.appliance.applianceId").String(), ":")
+		deviceID := applianceID[0]
+		resource := ""
+		if len(applianceID) == 2 {
+			resource = applianceID[1]
+		}
+
+		if name == TURN_ON_REQUEST {
+			response.Header.Name = TURN_ON_CONFIRMATION
+			onTurnOnOffRequest(deviceID, true)
+		} else if name == TURN_OFF_REQUEST {
+			response.Header.Name = TURN_OFF_CONFIRMATION
+			onTurnOnOffRequest(deviceID, true)
+		} else if name == SET_PERCENTAGE_REQUEST {
+			response.Header.Name = SET_PERCENTAGE_REQUEST
+			percent := gjson.Get(message, "payload.percentageState.value").Int()
+			onSetPercentRequest(deviceID, resource, percent)
+		} else if name == INCREMENT_PERCENTAGE_REQUEST {
+			response.Header.Name = INCREMENT_PERCENTAGE_CONFIRMATION
+			percent := gjson.Get(message, "payload.deltaPercentage.value").Int()
+			onChangePercentRequest(deviceID, resource, percent)
+		} else if name == DECREMENT_PERCENTAGE_REQUEST {
+			response.Header.Name = DECREMENT_PERCENTAGE_CONFIRMATION
+			percent := gjson.Get(message, "payload.deltaPercentage.value").Int()
+			onChangePercentRequest(deviceID, resource, -percent)
+		}
+
 		log.Println(response)
 		c.JSON(iris.StatusOK, response)
 	}
@@ -290,26 +347,24 @@ func main() {
 			log.Println("Connection with ID: " + c.ID() + " has been disconnected!")
 		})
 	})
+
 	app.Post("/", func(c *iris.Context) {
-		buf := new(bytes.Buffer)
-		buf.ReadFrom(c.Request.Body)
-		r := buf.String()
-
-		fmt.Println(r)
-
-		AlexaMessage := &AlexaMessage{}
-
-		if err := json.Unmarshal([]byte(r), &AlexaMessage); err != nil {
-			fmt.Println(err)
-		}
-
-		userInfo, err := getUserInfo(AlexaMessage.Payload.AccessToken)
+		bodyBytes, err := ioutil.ReadAll(c.Request.Body)
 		if err != nil {
-			fmt.Println(err)
+			c.JSON(iris.StatusInternalServerError, nil)
+			return
+		}
+		body := string(bodyBytes)
+
+		token := gjson.Get(body, "header.payload.accessToken").String()
+
+		userInfo, err := getUserInfo(token)
+		if err != nil {
+			log.Println(err)
 			return
 		}
 
-		handleAlexaMessage(AlexaMessage, clientConnections, &userInfo, c)
+		handleAlexaMessage(body, clientConnections, &userInfo, c)
 	})
 
 	app.Listen(":12345")
