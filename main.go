@@ -12,9 +12,33 @@ import (
 
 	"strconv"
 
+	"strings"
+
 	"gopkg.in/kataras/iris.v6"
 	"gopkg.in/kataras/iris.v6/adaptors/httprouter"
 	"gopkg.in/kataras/iris.v6/adaptors/websocket"
+)
+
+const (
+	NAMESPACE_CONTROL   = "Alexa.ConnectedHome.Control"
+	NAMESPACE_DISCOVERY = "Alexa.ConnectedHome.Discovery"
+
+	DISCOVER_APPLIANCES_REQUEST  = "DiscoverAppliancesRequest"
+	DISCOVER_APPLIANCES_RESPONSE = "DiscoverAppliancesResponse"
+
+	TURN_ON_REQUEST       = "TurnOnRequest"
+	TURN_OFF_REQUEST      = "TurnOffRequest"
+	TURN_ON_CONFIRMATION  = "TurnOnConfirmation"
+	TURN_OFF_CONFIRMATION = "TurnOffConfirmation"
+
+	SET_PERCENTAGE_REQUEST            = "SetPercentageRequest"
+	SET_PERCENTAGE_CONFIRMATION       = "SetPercentageConfirmation"
+	INCREMENT_PERCENTAGE_REQUEST      = "IncrementPercentageRequest"
+	INCREMENT_PERCENTAGE_CONFIRMATION = "IncrementPercentageConfirmation"
+	DECREMENT_PERCENTAGE_REQUEST      = "DecrementPercentageRequest"
+	DECREMENT_PERCENTAGE_CONFIRMATION = "DecrementPercentageConfirmation"
+
+	MANUFACTURER_NAME = "Wiklosoft"
 )
 
 type AlexaHeader struct {
@@ -27,9 +51,29 @@ type AlexaPayload struct {
 	AccessToken string `json:"accessToken"`
 }
 
-type AlexaRequest struct {
+type AlexaMessage struct {
 	Header  AlexaHeader  `json:"header"`
 	Payload AlexaPayload `json:"payload"`
+}
+type AlexaDevice struct {
+	ApplicanceID        string `json:"applianceId"`
+	ManufacturerName    string `json:"manufacturerName"`
+	ModelName           string `json:"modelName"`
+	FriendlyName        string `json:"friendlyName"`
+	FriendlyDescription string `json:"friendlyDescription"`
+	IsReachable         bool   `json:"isReachable"`
+	Version             string `json:"version"`
+
+	Actions                    []string `json:"actions"`
+	AdditionalApplianceDetails struct {
+	} `json:"additionalApplianceDetails"`
+}
+
+type AlexaDiscoveryResponse struct {
+	Header  AlexaHeader `json:"header"`
+	Payload struct {
+		DiscoveredAppliances []AlexaDevice `json:"discoveredAppliances"`
+	} `json:"payload"`
 }
 
 type AuthUserData struct {
@@ -48,6 +92,15 @@ type IotDevice struct {
 	ID        string
 	Name      string
 	Variables []IotVariable `json:"variables"`
+}
+
+func (device *IotDevice) getVariable(href string) *IotVariable {
+	for _, variable := range device.Variables {
+		if variable.Href == href {
+			return &variable
+		}
+	}
+	return nil
 }
 
 type ClientConnection struct {
@@ -109,6 +162,7 @@ func getUserInfo(token string) (user AuthUserData, e error) {
 }
 
 func sendRequest(conn *ClientConnection, request string, callback RequestCallback) {
+	log.Println("sendRequest " + request)
 	conn.Callbacks[conn.Mid] = callback
 	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.Itoa(conn.Mid) + `, "payload":{"request":"` + request + `"}}`))
 	conn.Mid++
@@ -121,6 +175,63 @@ func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
 	}
 	conn.DeviceList = message.Payload.Devices
 	log.Println(message)
+}
+
+func handleAlexaMessage(request *AlexaMessage, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
+
+	if request.Header.Namespace == NAMESPACE_DISCOVERY {
+		response := &AlexaDiscoveryResponse{}
+		response.Header.Name = DISCOVER_APPLIANCES_RESPONSE
+		response.Header.Namespace = NAMESPACE_DISCOVERY
+		response.Header.PayloadVersion = "2"
+		response.Header.MessageID = "746d98-ab02-4c9e-9d0d-b44711658414" //TODO: add random value
+
+		for e := clientConnections.Front(); e != nil; e = e.Next() {
+			con := e.Value.(*ClientConnection)
+			if userInfo.Username != "" && con.Username == userInfo.Username {
+				for _, device := range con.DeviceList {
+					log.Println("Adding device " + device.ID)
+
+					if device.getVariable("/master") != nil {
+						dev := AlexaDevice{
+							ApplicanceID:        device.ID,
+							ManufacturerName:    MANUFACTURER_NAME,
+							ModelName:           "The Best Model",
+							FriendlyName:        device.Name,
+							FriendlyDescription: "OCF Device by Wiklosoft",
+							IsReachable:         true,
+							Version:             "0.1",
+						}
+
+						dev.Actions = append(dev.Actions, "turnOn")
+						dev.Actions = append(dev.Actions, "turnOff")
+						response.Payload.DiscoveredAppliances = append(response.Payload.DiscoveredAppliances, dev)
+					}
+
+					for _, variable := range device.Variables {
+						if variable.ResourceType == "oic.r.light.dimming" {
+							dev := AlexaDevice{
+								ApplicanceID:        device.ID + ":" + strings.Replace(variable.Href, "/", "_", -1),
+								ManufacturerName:    MANUFACTURER_NAME,
+								ModelName:           "The Best Model",
+								FriendlyName:        variable.Name,
+								FriendlyDescription: "OCF Resource by Wiklosoft",
+								IsReachable:         true,
+								Version:             "0.1",
+							}
+
+							dev.Actions = append(dev.Actions, "setPercentage")
+							dev.Actions = append(dev.Actions, "incrementPercentage")
+							dev.Actions = append(dev.Actions, "decrementPercentage")
+							response.Payload.DiscoveredAppliances = append(response.Payload.DiscoveredAppliances, dev)
+						}
+					}
+				}
+			}
+		}
+		log.Println(response)
+		c.JSON(iris.StatusOK, response)
+	}
 }
 
 func main() {
@@ -160,6 +271,7 @@ func main() {
 				callback(messageBytes)
 				delete(newConnection.Callbacks, message.Mid)
 			}
+
 		})
 
 		c.OnDisconnect(func() {
@@ -180,27 +292,19 @@ func main() {
 
 		fmt.Println(r)
 
-		alexaRequest := &AlexaRequest{}
+		AlexaMessage := &AlexaMessage{}
 
-		if err := json.Unmarshal([]byte(r), &alexaRequest); err != nil {
+		if err := json.Unmarshal([]byte(r), &AlexaMessage); err != nil {
 			fmt.Println(err)
 		}
 
-		userInfo, err := getUserInfo(alexaRequest.Payload.AccessToken)
+		userInfo, err := getUserInfo(AlexaMessage.Payload.AccessToken)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 
-		for e := clientConnections.Front(); e != nil; e = e.Next() {
-			con := e.Value.(*ClientConnection)
-
-			if userInfo.Username != "" && con.Username == userInfo.Username {
-				log.Println("Send message to connection ID", con.Connection.ID())
-				con.Connection.EmitMessage([]byte("AlexaRequest:" + r))
-			}
-		}
-		c.JSON(iris.StatusOK, nil)
+		handleAlexaMessage(AlexaMessage, clientConnections, &userInfo, c)
 	})
 
 	app.Listen(":12345")
