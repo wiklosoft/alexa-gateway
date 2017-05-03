@@ -219,14 +219,61 @@ func setDeviceValue(clientConnection *ClientConnection, deviceID string, resourc
 	sendRequest(clientConnection, `{"di":"`+deviceID+`","request":"RequestSetValue", "resource":"`+resourceID+`", "value":`+valueObject+`}`, nil)
 }
 
-func onTurnOnOffRequest(clientConnection *ClientConnection, deviceID string, value bool) {
-	setDeviceValue(clientConnection, deviceID, "/master", `{"value":`+strconv.FormatBool(value)+`}`)
+func onTurnOnOffRequest(clientConnection *ClientConnection, device *IotDevice, value bool) {
+	setDeviceValue(clientConnection, device.ID, "/master", `{"value":`+strconv.FormatBool(value)+`}`)
 }
-func onSetPercentRequest(deviceID string, resource string, value int64) {
+func onSetPercentRequest(clientConnection *ClientConnection, device *IotDevice, resource string, value int64) {
+	resourceType := device.getVariable(resource).ResourceType
+	variable := device.getVariable(resource).Value
 
+	if resourceType == "oic.r.light.dimming" {
+		var max int64
+		if !variable.Get("range").Exists() {
+			max = 100
+		} else {
+			var err error
+			max, err = strconv.ParseInt(strings.Split(variable.Get("range").String(), ",")[1], 10, 0)
+			if err != nil {
+				log.Println(err)
+				max = 100
+			}
+		}
+
+		newValue := value * max / 100
+
+		setDeviceValue(clientConnection, device.ID, resource, `{"dimmingSetting":`+strconv.FormatInt(newValue, 10)+`}`)
+	}
 }
-func onChangePercentRequest(deviceID string, resource string, value int64) {
+func onChangePercentRequest(conn *ClientConnection, device *IotDevice, resource string, value int64) {
+	resourceType := device.getVariable(resource).ResourceType
+	variable := device.getVariable(resource).Value
 
+	if resourceType == "oic.r.light.dimming" {
+		var max int64
+		if !variable.Get("range").Exists() {
+			max = 100
+		} else {
+			var err error
+			max, err = strconv.ParseInt(strings.Split(variable.Get("range").String(), ",")[1], 10, 0)
+			if err != nil {
+				log.Println(err)
+				max = 100
+			}
+		}
+
+		diffValue := value * max / 100
+		prevValue := variable.Get("dimmingSetting").Int()
+		newValue := prevValue + diffValue
+
+		if newValue > max {
+			newValue = max
+		}
+
+		if newValue < 0 {
+			newValue = 0
+		}
+		setDeviceValue(conn, device.ID, resource, `{"dimmingSetting":`+strconv.FormatInt(newValue, 10)+`}`)
+	}
 }
 
 func handleAlexaMessage(message string, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
@@ -300,24 +347,26 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 			resource = applianceID[1]
 		}
 
+		device := clientConnection.getDevice(deviceID)
+
 		if name == TURN_ON_REQUEST {
 			response.Header.Name = TURN_ON_CONFIRMATION
-			onTurnOnOffRequest(clientConnection, deviceID, true)
+			onTurnOnOffRequest(clientConnection, device, true)
 		} else if name == TURN_OFF_REQUEST {
 			response.Header.Name = TURN_OFF_CONFIRMATION
-			onTurnOnOffRequest(clientConnection, deviceID, false)
+			onTurnOnOffRequest(clientConnection, device, false)
 		} else if name == SET_PERCENTAGE_REQUEST {
 			response.Header.Name = SET_PERCENTAGE_REQUEST
 			percent := gjson.Get(message, "payload.percentageState.value").Int()
-			onSetPercentRequest(deviceID, resource, percent)
+			onSetPercentRequest(clientConnection, device, resource, percent)
 		} else if name == INCREMENT_PERCENTAGE_REQUEST {
 			response.Header.Name = INCREMENT_PERCENTAGE_CONFIRMATION
 			percent := gjson.Get(message, "payload.deltaPercentage.value").Int()
-			onChangePercentRequest(deviceID, resource, percent)
+			onChangePercentRequest(clientConnection, device, resource, percent)
 		} else if name == DECREMENT_PERCENTAGE_REQUEST {
 			response.Header.Name = DECREMENT_PERCENTAGE_CONFIRMATION
 			percent := gjson.Get(message, "payload.deltaPercentage.value").Int()
-			onChangePercentRequest(deviceID, resource, -percent)
+			onChangePercentRequest(clientConnection, device, resource, -percent)
 		}
 
 		log.Println(response)
