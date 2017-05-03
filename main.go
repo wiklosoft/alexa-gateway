@@ -190,9 +190,12 @@ func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
 func generateMessageUUID() string {
 	return uuid.NewV4().String()
 }
+func setDeviceValue(clientConnection *ClientConnection, deviceID string, resourceID string, valueObject string) {
+	sendRequest(clientConnection, `{"di":"`+deviceID+`","request":"RequestSetValue", "resource":"`+resourceID+`", "value":`+valueObject+`}`, nil)
+}
 
-func onTurnOnOffRequest(deviceID string, value bool) {
-
+func onTurnOnOffRequest(clientConnection *ClientConnection, deviceID string, value bool) {
+	setDeviceValue(clientConnection, deviceID, "/master", `{"value":`+strconv.FormatBool(value)+`}`)
 }
 func onSetPercentRequest(deviceID string, resource string, value int64) {
 
@@ -265,6 +268,7 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 		response.Header.MessageID = generateMessageUUID()
 
 		applianceID := strings.Split(gjson.Get(message, "payload.appliance.applianceId").String(), ":")
+		clientConnection := clientConnections.Front().Value.(*ClientConnection) //TODO: get client connection for this device - include hubID in url or smth
 		deviceID := applianceID[0]
 		resource := ""
 		if len(applianceID) == 2 {
@@ -273,10 +277,10 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 
 		if name == TURN_ON_REQUEST {
 			response.Header.Name = TURN_ON_CONFIRMATION
-			onTurnOnOffRequest(deviceID, true)
+			onTurnOnOffRequest(clientConnection, deviceID, true)
 		} else if name == TURN_OFF_REQUEST {
 			response.Header.Name = TURN_OFF_CONFIRMATION
-			onTurnOnOffRequest(deviceID, true)
+			onTurnOnOffRequest(clientConnection, deviceID, false)
 		} else if name == SET_PERCENTAGE_REQUEST {
 			response.Header.Name = SET_PERCENTAGE_REQUEST
 			percent := gjson.Get(message, "payload.percentageState.value").Int()
