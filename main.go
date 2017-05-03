@@ -173,7 +173,9 @@ func getUserInfo(token string) (user AuthUserData, e error) {
 
 func sendRequest(conn *ClientConnection, payload string, callback RequestCallback) {
 	log.Println("sendRequest " + payload)
-	conn.Callbacks[conn.Mid] = callback
+	if callback != nil {
+		conn.Callbacks[conn.Mid] = callback
+	}
 	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.Itoa(conn.Mid) + `, "payload":` + payload + `}`))
 	conn.Mid++
 }
