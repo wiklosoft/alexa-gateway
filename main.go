@@ -96,6 +96,7 @@ type IotVariable struct {
 	ResourceType string `json:"rt"`
 	Href         string `json:"href"`
 	Name         string `json:"n"`
+	Value        gjson.Result
 }
 
 type IotDevice struct {
@@ -113,16 +114,25 @@ func (device *IotDevice) getVariable(href string) *IotVariable {
 	return nil
 }
 
+func (connection *ClientConnection) getDevice(uuid string) *IotDevice {
+	for _, device := range connection.DeviceList {
+		if device.ID == uuid {
+			return &device
+		}
+	}
+	return nil
+}
+
 type ClientConnection struct {
 	Username   string
 	Connection websocket.Connection
 	DeviceList []IotDevice
 
-	Callbacks map[int]RequestCallback
-	Mid       int
+	Callbacks map[int64]RequestCallback
+	Mid       int64
 }
 
-type RequestCallback func([]byte)
+type RequestCallback func(string)
 
 type IotPayload struct {
 	Request string `json:"request"`
@@ -176,16 +186,29 @@ func sendRequest(conn *ClientConnection, payload string, callback RequestCallbac
 	if callback != nil {
 		conn.Callbacks[conn.Mid] = callback
 	}
-	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.Itoa(conn.Mid) + `, "payload":` + payload + `}`))
+	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.FormatInt(conn.Mid, 10) + `, "payload":` + payload + `}`))
 	conn.Mid++
 }
 
-func parseDeviceList(conn *ClientConnection, messageBytes []byte) {
-	message := &EventDeviceListMessage{}
-	if err := json.Unmarshal(messageBytes, &message); err != nil {
+func parseDeviceList(conn *ClientConnection, message string) {
+	m := &EventDeviceListMessage{}
+	if err := json.Unmarshal([]byte(message), &m); err != nil {
 		fmt.Println(err)
 	}
-	conn.DeviceList = message.Payload.Devices
+	conn.DeviceList = m.Payload.Devices
+
+	devices := gjson.Get(message, "payload.devices").Array()
+
+	for _, device := range devices {
+		deviceID := device.Get("id").String()
+		sendRequest(conn, `{"request":"RequestSubscribeDevices", "uuid":"`+deviceID+`"}`, nil)
+
+		for _, variable := range device.Get("variables").Array() {
+			variableHref := variable.Get("href").String()
+			conn.getDevice(deviceID).getVariable(variableHref).Value = variable.Get("values")
+		}
+
+	}
 	log.Println(message)
 }
 
@@ -319,25 +342,24 @@ func main() {
 		newConnection := &ClientConnection{Username: "",
 			Connection: c,
 			Mid:        1,
-			Callbacks:  make(map[int]RequestCallback)}
+			Callbacks:  make(map[int64]RequestCallback)}
 		clientConnections.PushBack(newConnection)
 
-		sendRequest(newConnection, `{"request":"RequestGetDevices"}`, func(response []byte) {
+		sendRequest(newConnection, `{"request":"RequestGetDevices"}`, func(response string) {
 			parseDeviceList(newConnection, response)
 		})
 
 		c.OnMessage(func(messageBytes []byte) {
-			message := &IotMessage{}
+			message := string(messageBytes)
 
-			if err := json.Unmarshal(messageBytes, &message); err != nil {
-				fmt.Println(err)
-			}
+			mid := gjson.Get(message, "mid").Int()
+
 			log.Println(message)
 
-			callback := newConnection.Callbacks[message.Mid]
+			callback := newConnection.Callbacks[mid]
 			if callback != nil {
-				callback(messageBytes)
-				delete(newConnection.Callbacks, message.Mid)
+				callback(message)
+				delete(newConnection.Callbacks, mid)
 			}
 
 		})
