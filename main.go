@@ -311,7 +311,7 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 
 					if device.getVariable("/master") != nil {
 						dev := AlexaDevice{
-							ApplicanceID:        device.ID,
+							ApplicanceID:        con.Uuid + ":" + device.ID,
 							ManufacturerName:    MANUFACTURER_NAME,
 							ModelName:           "The Best Model",
 							FriendlyName:        device.Name,
@@ -328,7 +328,7 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 					for _, variable := range device.Variables {
 						if variable.ResourceType == "oic.r.light.dimming" {
 							dev := AlexaDevice{
-								ApplicanceID:        device.ID + ":" + strings.Replace(variable.Href, "/", "_", -1),
+								ApplicanceID:        con.Uuid + ":" + device.ID + ":" + strings.Replace(variable.Href, "/", "_", -1),
 								ManufacturerName:    MANUFACTURER_NAME,
 								ModelName:           "The Best Model",
 								FriendlyName:        variable.Name,
@@ -357,14 +357,29 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 		response.Header.MessageID = generateMessageUUID()
 
 		applianceID := strings.Split(gjson.Get(message, "payload.appliance.applianceId").String(), ":")
-		clientConnection := clientConnections.Front().Value.(*ClientConnection) //TODO: get client connection for this device - include hubID in url or smth
-		deviceID := applianceID[0]
+
+		connectionID := applianceID[0]
+		deviceID := applianceID[1]
 		resource := ""
 		if len(applianceID) == 2 {
 			resource = strings.Replace(applianceID[1], "_", "/", -1)
 		}
+		var clientConnection *ClientConnection
+		for e := clientConnections.Front(); e != nil; e = e.Next() {
+			if e.Value.(*ClientConnection).Uuid == connectionID {
+				clientConnection = e.Value.(*ClientConnection)
+			}
+		}
+		if clientConnection == nil {
+			//TODO: notify amazon that device does not exist
+			return
+		}
 
 		device := clientConnection.getDevice(deviceID)
+		if device == nil {
+			//TODO: notify amazon that device does not exist
+			return
+		}
 
 		if name == TURN_ON_REQUEST {
 			response.Header.Name = TURN_ON_CONFIRMATION
