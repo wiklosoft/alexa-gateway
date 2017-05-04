@@ -207,7 +207,7 @@ func parseDeviceList(conn *ClientConnection, message string) {
 			Name: deviceData.Get("name").String(),
 		}
 
-		sendRequest(conn, `{"request":"RequestSubscribeDevices", "uuid":"`+d.ID+`"}`, nil)
+		sendRequest(conn, `{"name":"RequestSubscribeDevices", "uuid":"`+d.ID+`"}`, nil)
 
 		for _, variableData := range deviceData.Get("variables").Array() {
 			v := &IotVariable{
@@ -231,7 +231,7 @@ func generateMessageUUID() string {
 	return uuid.NewV4().String()
 }
 func setDeviceValue(clientConnection *ClientConnection, deviceID string, resourceID string, valueObject string) {
-	sendRequest(clientConnection, `{"di":"`+deviceID+`","request":"RequestSetValue", "resource":"`+resourceID+`", "value":`+valueObject+`}`, nil)
+	sendRequest(clientConnection, `{"di":"`+deviceID+`","name":"RequestSetValue", "resource":"`+resourceID+`", "value":`+valueObject+`}`, nil)
 }
 
 func onTurnOnOffRequest(clientConnection *ClientConnection, device *IotDevice, value bool) {
@@ -427,7 +427,7 @@ func main() {
 			Callbacks:  make(map[int64]RequestCallback)}
 		clientConnections.PushBack(newConnection)
 
-		sendRequest(newConnection, `{"request":"RequestGetDevices"}`, func(response string) {
+		sendRequest(newConnection, `{"name":"RequestGetDevices"}`, func(response string) {
 			parseDeviceList(newConnection, response)
 		})
 
