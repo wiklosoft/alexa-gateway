@@ -465,7 +465,7 @@ func main() {
 		}
 		body := string(bodyBytes)
 
-		token := gjson.Get(body, "header.payload.accessToken").String()
+		token := gjson.Get(body, "payload.accessToken").String()
 
 		userInfo, err := getUserInfo(token)
 		if err != nil {
