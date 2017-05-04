@@ -296,6 +296,7 @@ func onChangePercentRequest(conn *ClientConnection, device *IotDevice, resource 
 func handleAlexaMessage(message string, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
 	namespace := gjson.Get(message, "header.namespace").String()
 
+	log.Println("handleAlexaMessage: " + message)
 	if namespace == NAMESPACE_DISCOVERY {
 		response := &AlexaDiscoveryResponse{}
 		response.Header.Name = DISCOVER_APPLIANCES_RESPONSE
