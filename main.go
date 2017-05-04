@@ -96,19 +96,19 @@ type IotVariable struct {
 	ResourceType string `json:"rt"`
 	Href         string `json:"href"`
 	Name         string `json:"n"`
-	Value        gjson.Result
+	Value        string
 }
 
 type IotDevice struct {
 	ID        string
 	Name      string
-	Variables []IotVariable `json:"variables"`
+	Variables []*IotVariable `json:"variables"`
 }
 
 func (device *IotDevice) getVariable(href string) *IotVariable {
 	for _, variable := range device.Variables {
 		if variable.Href == href {
-			return &variable
+			return variable
 		}
 	}
 	return nil
@@ -117,7 +117,7 @@ func (device *IotDevice) getVariable(href string) *IotVariable {
 func (connection *ClientConnection) getDevice(uuid string) *IotDevice {
 	for _, device := range connection.DeviceList {
 		if device.ID == uuid {
-			return &device
+			return device
 		}
 	}
 	return nil
@@ -126,7 +126,7 @@ func (connection *ClientConnection) getDevice(uuid string) *IotDevice {
 type ClientConnection struct {
 	Username   string
 	Connection websocket.Connection
-	DeviceList []IotDevice
+	DeviceList []*IotDevice
 
 	Callbacks map[int64]RequestCallback
 	Mid       int64
@@ -195,18 +195,29 @@ func parseDeviceList(conn *ClientConnection, message string) {
 	if err := json.Unmarshal([]byte(message), &m); err != nil {
 		fmt.Println(err)
 	}
-	conn.DeviceList = m.Payload.Devices
 
 	devices := gjson.Get(message, "payload.devices").Array()
-
-	for _, device := range devices {
-		deviceID := device.Get("id").String()
-		sendRequest(conn, `{"request":"RequestSubscribeDevices", "uuid":"`+deviceID+`"}`, nil)
-
-		for _, variable := range device.Get("variables").Array() {
-			variableHref := variable.Get("href").String()
-			conn.getDevice(deviceID).getVariable(variableHref).Value = variable.Get("values")
+	for _, deviceData := range devices {
+		d := &IotDevice{
+			ID:   deviceData.Get("id").String(),
+			Name: deviceData.Get("name").String(),
 		}
+
+		sendRequest(conn, `{"request":"RequestSubscribeDevices", "uuid":"`+d.ID+`"}`, nil)
+
+		for _, variableData := range deviceData.Get("variables").Array() {
+			v := &IotVariable{
+				Href:         variableData.Get("href").String(),
+				Name:         variableData.Get("n").String(),
+				Interface:    variableData.Get("if").String(),
+				ResourceType: variableData.Get("rt").String(),
+				Value:        variableData.Get("values").String(),
+			}
+			d.Variables = append(d.Variables, v)
+
+			log.Println(v)
+		}
+		conn.DeviceList = append(conn.DeviceList, d)
 
 	}
 	log.Println(message)
@@ -224,8 +235,8 @@ func onTurnOnOffRequest(clientConnection *ClientConnection, device *IotDevice, v
 }
 func onSetPercentRequest(clientConnection *ClientConnection, device *IotDevice, resource string, value int64) {
 	resourceType := device.getVariable(resource).ResourceType
-	variable := device.getVariable(resource).Value
-
+	variable := gjson.Parse(device.getVariable(resource).Value)
+	log.Println("onSetPercentRequest " + resource + " variable:" + device.getVariable(resource).Value)
 	if resourceType == "oic.r.light.dimming" {
 		var max int64
 		if !variable.Get("range").Exists() {
@@ -246,7 +257,7 @@ func onSetPercentRequest(clientConnection *ClientConnection, device *IotDevice, 
 }
 func onChangePercentRequest(conn *ClientConnection, device *IotDevice, resource string, value int64) {
 	resourceType := device.getVariable(resource).ResourceType
-	variable := device.getVariable(resource).Value
+	variable := gjson.Parse(device.getVariable(resource).Value)
 
 	if resourceType == "oic.r.light.dimming" {
 		var max int64
@@ -263,7 +274,9 @@ func onChangePercentRequest(conn *ClientConnection, device *IotDevice, resource 
 
 		diffValue := value * max / 100
 		prevValue := variable.Get("dimmingSetting").Int()
+
 		newValue := prevValue + diffValue
+		log.Println("onChangePercentRequest oldValue:", prevValue, "newValue: ", newValue, " diff:", diffValue)
 
 		if newValue > max {
 			newValue = max
