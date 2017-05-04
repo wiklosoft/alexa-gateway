@@ -130,6 +130,8 @@ type ClientConnection struct {
 
 	Callbacks map[int64]RequestCallback
 	Mid       int64
+	Uuid      string
+	Name      string
 }
 
 type RequestCallback func(string)
@@ -413,6 +415,7 @@ func main() {
 
 		c.OnMessage(func(messageBytes []byte) {
 			message := string(messageBytes)
+			messageJson := gjson.Parse(message)
 			log.Println("onMessage" + message)
 
 			mid := gjson.Get(message, "mid").Int()
@@ -423,10 +426,10 @@ func main() {
 				delete(newConnection.Callbacks, mid)
 			}
 
-			eventName := gjson.Get(message, "name").String()
+			eventName := messageJson.Get("name").String()
 
 			if eventName == "RequestAuthorize" {
-				token := gjson.Get(message, "payload.token").String()
+				token := messageJson.Get("payload.token").String()
 				userInfo, err := getUserInfo(token)
 				if err != nil {
 					log.Println(err)
@@ -434,9 +437,12 @@ func main() {
 				}
 				log.Println("New connection authorized for " + userInfo.Username)
 				newConnection.Username = userInfo.Username
+				newConnection.Uuid = messageJson.Get("payload.uuid").String()
+				newConnection.Name = messageJson.Get("payload.name").String()
 			}
 
 			log.Println("Event: " + eventName)
+
 		})
 
 		c.OnDisconnect(func() {
