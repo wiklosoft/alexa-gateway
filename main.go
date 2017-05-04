@@ -344,7 +344,7 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 		deviceID := applianceID[0]
 		resource := ""
 		if len(applianceID) == 2 {
-			resource = applianceID[1]
+			resource = strings.Replace(applianceID[1], "_", "/", -1)
 		}
 
 		device := clientConnection.getDevice(deviceID)
