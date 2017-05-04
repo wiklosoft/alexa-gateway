@@ -155,7 +155,7 @@ type EventDeviceListMessage struct {
 	Event   string     `json:"event"`
 }
 
-func getUserInfo(token string) (user AuthUserData, e error) {
+func getUserInfo(token string) (user *AuthUserData, e error) {
 	clientID := "test_client_1"
 	clientSecret := "test_secret"
 
@@ -167,19 +167,21 @@ func getUserInfo(token string) (user AuthUserData, e error) {
 	resp, err := http.Post("https://"+clientID+":"+clientSecret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Println(err)
-		return AuthUserData{}, err
+		return &AuthUserData{}, err
 	}
 	defer resp.Body.Close()
 
-	userData := AuthUserData{}
+	userData := &AuthUserData{}
 
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
-	r := buf.String()
-
-	if err := json.Unmarshal([]byte(r), &userData); err != nil {
-		log.Fatal(err)
+	bodyBytes, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return &AuthUserData{}, err
 	}
+	r := gjson.ParseBytes(bodyBytes)
+
+	userData.Username = r.Get("username").String()
+	userData.Active = r.Get("active").Bool()
+
 	return userData, nil
 }
 
@@ -403,7 +405,7 @@ func main() {
 
 	ws.OnConnection(func(c websocket.Connection) {
 		log.Println("New connection", c.ID())
-		newConnection := &ClientConnection{Username: "",
+		newConnection := &ClientConnection{
 			Connection: c,
 			Mid:        1,
 			Callbacks:  make(map[int64]RequestCallback)}
@@ -473,7 +475,7 @@ func main() {
 			return
 		}
 
-		handleAlexaMessage(body, clientConnections, &userInfo, c)
+		handleAlexaMessage(body, clientConnections, userInfo, c)
 	})
 
 	app.Listen(":12345")
