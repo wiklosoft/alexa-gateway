@@ -413,10 +413,9 @@ func main() {
 
 		c.OnMessage(func(messageBytes []byte) {
 			message := string(messageBytes)
+			log.Println("onMessage" + message)
 
 			mid := gjson.Get(message, "mid").Int()
-
-			log.Println(message)
 
 			callback := newConnection.Callbacks[mid]
 			if callback != nil {
@@ -424,6 +423,20 @@ func main() {
 				delete(newConnection.Callbacks, mid)
 			}
 
+			eventName := gjson.Get(message, "name").String()
+
+			if eventName == "RequestAuthorize" {
+				token := gjson.Get(message, "payload.token").String()
+				userInfo, err := getUserInfo(token)
+				if err != nil {
+					log.Println(err)
+					return
+				}
+				log.Println("New connection authorized for " + userInfo.Username)
+				newConnection.Username = userInfo.Username
+			}
+
+			log.Println("Event: " + eventName)
 		})
 
 		c.OnDisconnect(func() {
