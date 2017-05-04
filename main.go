@@ -191,7 +191,20 @@ func sendRequest(conn *ClientConnection, payload string, callback RequestCallbac
 	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.FormatInt(conn.Mid, 10) + `, "payload":` + payload + `}`))
 	conn.Mid++
 }
+func handleValueUpdate(conn *ClientConnection, message gjson.Result) {
+	log.Println("handleValueUpdate " + message.String())
 
+	deviceID := message.Get("payload.di").String()
+	resourceID := message.Get("payload.resource").String()
+	value := message.Get("payload.value").String()
+
+	device := conn.getDevice(deviceID)
+	if device == nil {
+		log.Println("Unable to find device with ID" + deviceID)
+		return
+	}
+	device.getVariable(resourceID).Value = value
+}
 func parseDeviceList(conn *ClientConnection, message string) {
 	devices := gjson.Get(message, "payload.devices").Array()
 	//Add new devices
@@ -469,6 +482,8 @@ func main() {
 				newConnection.Name = messageJson.Get("payload.name").String()
 			} else if eventName == "EventDeviceListUpdate" {
 				parseDeviceList(newConnection, message)
+			} else if eventName == "EventValueUpdate" {
+				handleValueUpdate(newConnection, messageJson)
 			}
 
 		})
