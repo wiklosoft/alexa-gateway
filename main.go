@@ -356,7 +356,7 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 			response.Header.Name = TURN_OFF_CONFIRMATION
 			onTurnOnOffRequest(clientConnection, device, false)
 		} else if name == SET_PERCENTAGE_REQUEST {
-			response.Header.Name = SET_PERCENTAGE_REQUEST
+			response.Header.Name = SET_PERCENTAGE_CONFIRMATION
 			percent := gjson.Get(message, "payload.percentageState.value").Int()
 			onSetPercentRequest(clientConnection, device, resource, percent)
 		} else if name == INCREMENT_PERCENTAGE_REQUEST {
