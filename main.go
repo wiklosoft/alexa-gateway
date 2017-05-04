@@ -2,8 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"net/url"
@@ -115,9 +113,9 @@ func (device *IotDevice) getVariable(href string) *IotVariable {
 }
 
 func (connection *ClientConnection) getDevice(uuid string) *IotDevice {
-	for _, device := range connection.DeviceList {
-		if device.ID == uuid {
-			return device
+	for device := connection.DeviceList.Front(); device != nil; device = device.Next() {
+		if device.Value.(*IotDevice).ID == uuid {
+			return device.Value.(*IotDevice)
 		}
 	}
 	return nil
@@ -126,7 +124,7 @@ func (connection *ClientConnection) getDevice(uuid string) *IotDevice {
 type ClientConnection struct {
 	Username   string
 	Connection websocket.Connection
-	DeviceList []*IotDevice
+	DeviceList list.List
 
 	Callbacks map[int64]RequestCallback
 	Mid       int64
@@ -195,19 +193,20 @@ func sendRequest(conn *ClientConnection, payload string, callback RequestCallbac
 }
 
 func parseDeviceList(conn *ClientConnection, message string) {
-	m := &EventDeviceListMessage{}
-	if err := json.Unmarshal([]byte(message), &m); err != nil {
-		fmt.Println(err)
-	}
-
 	devices := gjson.Get(message, "payload.devices").Array()
+	//Add new devices
 	for _, deviceData := range devices {
+		deviceID := deviceData.Get("id").String()
+
+		if conn.getDevice(deviceID) != nil {
+			continue
+		}
 		d := &IotDevice{
-			ID:   deviceData.Get("id").String(),
+			ID:   deviceID,
 			Name: deviceData.Get("name").String(),
 		}
 
-		sendRequest(conn, `{"name":"RequestSubscribeDevices", "uuid":"`+d.ID+`"}`, nil)
+		sendRequest(conn, `{"name":"RequestSubscribeDevice", "uuid":"`+d.ID+`"}`, nil)
 
 		for _, variableData := range deviceData.Get("variables").Array() {
 			v := &IotVariable{
@@ -218,13 +217,23 @@ func parseDeviceList(conn *ClientConnection, message string) {
 				Value:        variableData.Get("values").String(),
 			}
 			d.Variables = append(d.Variables, v)
-
-			log.Println(v)
 		}
-		conn.DeviceList = append(conn.DeviceList, d)
-
+		conn.DeviceList.PushBack(d)
 	}
-	log.Println(message)
+	deviceIDs := gjson.Get(message, "payload.devices.#.id").Array()
+
+	for device := conn.DeviceList.Front(); device != nil; device = device.Next() {
+		found := false
+		for _, deviceID := range deviceIDs {
+			if device.Value.(*IotDevice).ID == deviceID.String() {
+				found = true
+			}
+		}
+		if !found {
+			sendRequest(conn, `{"name":"RequestUnsubscribeDevice", "uuid":"`+device.Value.(*IotDevice).ID+`"}`, nil)
+			conn.DeviceList.Remove(device)
+		}
+	}
 }
 
 func generateMessageUUID() string {
@@ -307,7 +316,8 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 		for e := clientConnections.Front(); e != nil; e = e.Next() {
 			con := e.Value.(*ClientConnection)
 			if userInfo.Username != "" && con.Username == userInfo.Username {
-				for _, device := range con.DeviceList {
+				for d := con.DeviceList.Front(); d != nil; d = d.Next() {
+					device := d.Value.(*IotDevice)
 					log.Println("Adding device " + device.ID)
 
 					if device.getVariable("/master") != nil {
@@ -434,7 +444,6 @@ func main() {
 		c.OnMessage(func(messageBytes []byte) {
 			message := string(messageBytes)
 			messageJson := gjson.Parse(message)
-			log.Println("onMessage" + message)
 
 			mid := gjson.Get(message, "mid").Int()
 
@@ -446,6 +455,7 @@ func main() {
 
 			eventName := messageJson.Get("name").String()
 
+			log.Println("Event: " + eventName)
 			if eventName == "RequestAuthorize" {
 				token := messageJson.Get("payload.token").String()
 				userInfo, err := getUserInfo(token)
@@ -457,9 +467,9 @@ func main() {
 				newConnection.Username = userInfo.Username
 				newConnection.Uuid = messageJson.Get("payload.uuid").String()
 				newConnection.Name = messageJson.Get("payload.name").String()
+			} else if eventName == "EventDeviceListUpdate" {
+				parseDeviceList(newConnection, message)
 			}
-
-			log.Println("Event: " + eventName)
 
 		})
 
