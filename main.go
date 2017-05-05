@@ -464,10 +464,6 @@ func main() {
 			Callbacks:  make(map[int64]RequestCallback)}
 		clientConnections.PushBack(newConnection)
 
-		sendRequest(newConnection, `{"name":"RequestGetDevices"}`, func(response string) {
-			parseDeviceList(newConnection, response)
-		})
-
 		c.OnMessage(func(messageBytes []byte) {
 			message := string(messageBytes)
 			messageJson := gjson.Parse(message)
@@ -495,6 +491,9 @@ func main() {
 					return
 				}
 				log.Println("New connection authorized for " + userInfo.Username)
+				sendRequest(newConnection, `{"name":"RequestGetDevices"}`, func(response string) {
+					parseDeviceList(newConnection, response)
+				})
 				newConnection.Username = userInfo.Username
 				newConnection.Uuid = messageJson.Get("payload.uuid").String()
 				newConnection.Name = messageJson.Get("payload.name").String()
