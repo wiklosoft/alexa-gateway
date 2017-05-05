@@ -17,6 +17,8 @@ import (
 
 	"io/ioutil"
 
+	"os"
+
 	"gopkg.in/kataras/iris.v6"
 	"gopkg.in/kataras/iris.v6/adaptors/httprouter"
 	"gopkg.in/kataras/iris.v6/adaptors/websocket"
@@ -153,16 +155,19 @@ type EventDeviceListMessage struct {
 	Event   string     `json:"event"`
 }
 
-func getUserInfo(token string) (user *AuthUserData, e error) {
-	clientID := "test_client_1"
-	clientSecret := "test_secret"
+type OAuthData struct {
+	Client string
+	Secret string
+}
+
+func getUserInfo(token string, auth *OAuthData) (user *AuthUserData, e error) {
 
 	form := url.Values{
 		"token":           {token},
 		"token_type_hint": {"access_token"},
 	}
 	body := bytes.NewBufferString(form.Encode())
-	resp, err := http.Post("https://"+clientID+":"+clientSecret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
+	resp, err := http.Post("https://"+auth.Client+":"+auth.Secret+"@auth.wiklosoft.com/v1/oauth/introspect", "application/x-www-form-urlencoded", body)
 	if err != nil {
 		log.Println(err)
 		return &AuthUserData{}, err
@@ -442,6 +447,15 @@ func main() {
 
 	clientConnections := list.New()
 
+	hubAuth := &OAuthData{
+		Client: os.Getenv("AUTH_HUB_CLIENT"),
+		Secret: os.Getenv("AUTH_HUB_CLIENT_SECRET"),
+	}
+	alexaAuth := &OAuthData{
+		Client: os.Getenv("AUTH_ALEXA_CLIENT"),
+		Secret: os.Getenv("AUTH_ALEXA_CLIENT_SECRET"),
+	}
+
 	ws.OnConnection(func(c websocket.Connection) {
 		log.Println("New connection", c.ID())
 		newConnection := &ClientConnection{
@@ -471,9 +485,13 @@ func main() {
 			log.Println("Event: " + eventName)
 			if eventName == "RequestAuthorize" {
 				token := messageJson.Get("payload.token").String()
-				userInfo, err := getUserInfo(token)
+				userInfo, err := getUserInfo(token, hubAuth)
 				if err != nil {
 					log.Println(err)
+					return
+				}
+				if userInfo.Username == "" {
+					log.Println("Connection not authorized")
 					return
 				}
 				log.Println("New connection authorized for " + userInfo.Username)
@@ -510,7 +528,7 @@ func main() {
 
 		token := gjson.Get(body, "payload.accessToken").String()
 
-		userInfo, err := getUserInfo(token)
+		userInfo, err := getUserInfo(token, alexaAuth)
 		if err != nil {
 			log.Println(err)
 			return
