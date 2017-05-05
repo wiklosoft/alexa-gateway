@@ -390,8 +390,8 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 		connectionID := applianceID[0]
 		deviceID := applianceID[1]
 		resource := ""
-		if len(applianceID) == 2 {
-			resource = strings.Replace(applianceID[1], "_", "/", -1)
+		if len(applianceID) == 3 {
+			resource = strings.Replace(applianceID[2], "_", "/", -1)
 		}
 		var clientConnection *ClientConnection
 		for e := clientConnections.Front(); e != nil; e = e.Next() {
