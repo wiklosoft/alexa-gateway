@@ -400,13 +400,15 @@ func handleAlexaMessage(message string, clientConnections *list.List, userInfo *
 			}
 		}
 		if clientConnection == nil {
-			//TODO: notify amazon that device does not exist
+			log.Println("Unable to found hub connection: " + connectionID)
+			c.JSON(iris.StatusInternalServerError, nil)
 			return
 		}
 
 		device := clientConnection.getDevice(deviceID)
 		if device == nil {
-			//TODO: notify amazon that device does not exist
+			log.Println("Unable to device connection: " + deviceID)
+			c.JSON(iris.StatusInternalServerError, nil)
 			return
 		}
 
