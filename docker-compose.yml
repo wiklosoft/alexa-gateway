@@ -1,0 +1,16 @@
+version: '2'
+
+services:
+  iot_gateway:
+    network_mode: "host"
+    restart: unless-stoppped
+    ports:
+      - "12345:12345"
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - AUTH_HUB_CLIENT=fillme
+      - AUTH_HUB_CLIENT_SECRET=fillme
+      - AUTH_ALEXA_CLIENT=fillme
+      - AUTH_ALEXA_CLIENT_SECRET=fillme
