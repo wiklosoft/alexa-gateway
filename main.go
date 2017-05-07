@@ -71,7 +71,7 @@ func sendRequest(conn *ClientConnection, name string, payload string, callback R
 	if callback != nil {
 		conn.Callbacks[conn.Mid] = callback
 	}
-	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.FormatInt(conn.Mid, 10) + `, "name":"` + name + `" "payload":` + payload + `}`))
+	conn.Connection.EmitMessage([]byte(`{ "mid":` + strconv.FormatInt(conn.Mid, 10) + `, "name":"` + name + `", "payload":` + payload + `}`))
 	conn.Mid++
 }
 func generateMessageUUID() string {
