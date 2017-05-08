@@ -81,14 +81,24 @@ func generateMessageUUID() string {
 func handleAlexaMessage(message string, clientConnections *list.List, userInfo *AuthUserData, c *iris.Context) {
 	log.Println("handleAlexaMessage: " + message)
 
-	for e := clientConnections.Front(); e != nil; e = e.Next() {
-		con := e.Value.(*ClientConnection)
-		if userInfo.Username != "" && con.Username == userInfo.Username {
-			sendRequest(con, "AlexaMessage", message, func(response gjson.Result) {
-				c.JSON(iris.StatusOK, response.String)
-			})
+	ch := make(chan string)
+
+	if clientConnections.Len() > 0 {
+		for e := clientConnections.Front(); e != nil; e = e.Next() {
+			con := e.Value.(*ClientConnection)
+			if userInfo.Username != "" && con.Username == userInfo.Username {
+				sendRequest(con, "AlexaMessage", message, func(response gjson.Result) {
+					log.Println("Response from backend")
+					ch <- response.String()
+				})
+				break
+			}
 		}
+		c.JSON(iris.StatusOK, <-ch)
+	} else {
+		c.JSON(iris.StatusBadGateway, nil)
 	}
+
 }
 
 func main() {
