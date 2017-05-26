@@ -1,0 +1,4 @@
+# alexa-gateway
+
+# License
+MIT
